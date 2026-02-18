@@ -1,6 +1,6 @@
 // ===== SISTEMA DE AUTENTICAÇÃO =====
 // CONFIGURAÇÃO DA SENHA - ALTERE AQUI
-const SENHA_ACESSO = "Sucesso@2026"; // ⚠️ ALTERE ESTA SENHA!
+const SENHA_ACESSO = "Desgraça@99"; // ⚠️ ALTERE ESTA SENHA!
 
 // Verificar se já está autenticado
 function verificarAutenticacao() {
