@@ -1,53 +1,4 @@
-// ===== SISTEMA DE AUTENTICAÇÃO =====
-// CONFIGURAÇÃO DA SENHA - ALTERE AQUI
-const SENHA_ACESSO = "Desgraça@99"; // ⚠️ ALTERE ESTA SENHA!
-
-// Verificar se já está autenticado
-function verificarAutenticacao() {
-    const autenticado = sessionStorage.getItem('authenticated');
-    if (autenticado === 'true') {
-        document.getElementById('loginOverlay').classList.add('hidden');
-        return true;
-    }
-    return false;
-}
-
-// Processar login
-function processarLogin(event) {
-    event.preventDefault();
-    
-    const passwordInput = document.getElementById('passwordInput');
-    const loginError = document.getElementById('loginError');
-    const senha = passwordInput.value;
-    
-    if (senha === SENHA_ACESSO) {
-        // Login bem-sucedido
-        sessionStorage.setItem('authenticated', 'true');
-        document.getElementById('loginOverlay').classList.add('hidden');
-        loginError.classList.remove('show');
-        passwordInput.classList.remove('error');
-        
-        // Inicializar sistema após login
-        inicializarSistema();
-        
-        // Foco no campo de pesquisa após login
-        setTimeout(() => {
-            const searchInput = document.getElementById('searchInput');
-            if (searchInput) searchInput.focus();
-        }, 100);
-    } else {
-        // Senha incorreta
-        loginError.classList.add('show');
-        passwordInput.classList.add('error');
-        passwordInput.value = '';
-        passwordInput.focus();
-        
-        // Remover classe de erro após animação
-        setTimeout(() => {
-            passwordInput.classList.remove('error');
-        }, 500);
-    }
-}
+// ===== AUTENTICAÇÃO DESATIVADA =====
 
 // Função para inicializar o sistema completo
 function inicializarSistema() {
@@ -957,23 +908,7 @@ function addNewProduct() {
 
 // Event listeners
 document.addEventListener('DOMContentLoaded', function() {
-    // ===== INICIALIZAR AUTENTICAÇÃO =====
-    const jaAutenticado = verificarAutenticacao();
-    
-    const loginForm = document.getElementById('loginForm');
-    if (loginForm) {
-        loginForm.addEventListener('submit', processarLogin);
-    }
-    
-    // Focar no campo de senha se não estiver autenticado
-    if (!jaAutenticado) {
-        const passwordInput = document.getElementById('passwordInput');
-        if (passwordInput) passwordInput.focus();
-        return; // Não carregar o resto se não estiver autenticado
-    }
-    // ===== FIM INICIALIZAÇÃO AUTENTICAÇÃO =====
-    
-    // Se já está autenticado, carregar o sistema
+    // Carregar o sistema diretamente (sem autenticação)
     inicializarSistema();
     
     const searchInput = document.getElementById('searchInput');
