@@ -1,15 +1,15 @@
 // ===== AUTENTICAÇÃO DESATIVADA =====
 
 // Função para inicializar o sistema completo
-function inicializarSistema() {
-    // Renderizar tabela inicial
+async function inicializarSistema() {
+    await carregarDados();
     renderTable();
 }
 
 // ===== FIM DO SISTEMA DE AUTENTICAÇÃO =====
 
-// Dados dos produtos
-const produtos = [
+// Dados dos produtos (fallback hardcoded)
+const PRODUTOS_PADRÃO = [
     { produto: "RESTYLANE", t1_pix: "R$ 255,00", t1_parcelado: "R$ 279,00", t2_pix: "R$ 246,00", t2_parcelado: "R$ 269,00", t3_pix: "-", t3_parcelado: "-" },
     { produto: "RESTYLANE LYFT", t1_pix: "R$ 390,00", t1_parcelado: "R$ 429,00", t2_pix: "R$ 375,00", t2_parcelado: "R$ 409,00", t3_pix: "-", t3_parcelado: "-" },
     { produto: "RESTYLANE KYSSE", t1_pix: "R$ 479,00", t1_parcelado: "R$ 519,00", t2_pix: "R$ 459,00", t2_parcelado: "R$ 499,00", t3_pix: "R$ 429,00", t3_parcelado: "R$ 459,00" },
@@ -68,7 +68,8 @@ const produtos = [
 ];
 
 // Variáveis globais
-let filteredProducts = [...produtos];
+let produtos = [];
+let filteredProducts = [];
 let currentTableFilter = 'all';
 let isEditMode = false;
 let isClientMode = false;
@@ -76,27 +77,47 @@ let editedProducts = null;
 let selectedProducts = new Set();
 let productTableConfig = {}; // Armazena qual tabela mostrar para cada produto
 
-// Carregar produtos salvos do localStorage
-function loadSavedProducts() {
+// Firebase Realtime Database
+const FIREBASE_URL = 'https://pesquisa-produtos-16475-default-rtdb.firebaseio.com/produtos.json';
+
+// Carregar dados: tenta Firebase, depois localStorage, depois fallback hardcoded
+async function carregarDados() {
+    try {
+        const resp = await fetch(FIREBASE_URL);
+        if (resp.ok) {
+            const json = await resp.json();
+            if (Array.isArray(json) && json.length > 0) {
+                produtos.length = 0;
+                produtos.push(...json);
+                localStorage.setItem('produtosData', JSON.stringify(produtos));
+                return;
+            }
+        }
+    } catch (e) {}
     const saved = localStorage.getItem('produtosData');
     if (saved) {
         try {
             const parsed = JSON.parse(saved);
-            produtos.length = 0;
-            produtos.push(...parsed);
-        } catch (e) {
-            console.error('Erro ao carregar dados salvos:', e);
-        }
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                produtos.length = 0;
+                produtos.push(...parsed);
+                return;
+            }
+        } catch (e) {}
     }
+    produtos.length = 0;
+    produtos.push(...PRODUTOS_PADRÃO);
 }
 
-// Salvar produtos no localStorage
+// Salvar produtos no localStorage e no Firebase
 function saveProducts() {
     localStorage.setItem('produtosData', JSON.stringify(produtos));
+    fetch(FIREBASE_URL, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(produtos)
+    }).catch(e => console.error('Erro ao salvar no Firebase:', e));
 }
-
-// Inicializar produtos salvos
-loadSavedProducts();
 
 // Função para normalizar texto (remover acentos e converter para minúsculas)
 function normalizeText(text) {
@@ -1118,7 +1139,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Re-renderizar
         renderTable(searchInput.value);
 
-        showToast('✅ Alterações salvas com sucesso!');
+        showToast('✅ Alterações salvas na nuvem!');
     });
 
     // Cancelar edição
