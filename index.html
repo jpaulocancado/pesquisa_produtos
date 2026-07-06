@@ -1253,7 +1253,7 @@
                 <span class="status-dot" id="syncStatusDot"></span>
                 <span id="syncStatusText">Modo offline (dados salvos neste navegador)</span>
                 <label class="sync-toggle-label">
-                    <input type="checkbox" id="syncToggle">
+                    <input type="checkbox" id="syncToggle" checked>
                     Sincronizar online
                 </label>
             </div>
@@ -1548,7 +1548,8 @@ function enrichMissingTags(lista) {
 
 // ===== Carregar / salvar dados =====
 async function carregarDados() {
-    syncEnabled = localStorage.getItem('syncEnabled') === 'true';
+    // Sincronização vem ativada por padrão; só fica desligada se o usuário desmarcar manualmente
+    syncEnabled = localStorage.getItem('syncEnabled') !== 'false';
 
     if (syncEnabled) {
         try {
