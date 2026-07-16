@@ -1343,12 +1343,8 @@
 
         <div class="data-tools-bar">
             <div class="sync-status">
-                <span class="status-dot" id="syncStatusDot"></span>
-                <span id="syncStatusText">Modo offline (dados salvos neste navegador)</span>
-                <label class="sync-toggle-label">
-                    <input type="checkbox" id="syncToggle">
-                    Sincronizar online
-                </label>
+                <span class="status-dot"></span>
+                <span>Dados salvos apenas neste navegador — use Exportar/Importar para backup e transferência</span>
             </div>
             <div class="data-tools-actions">
                 <button class="data-btn" id="exportJsonBtn">⬇️ Exportar JSON</button>
@@ -1593,10 +1589,6 @@ let isEditMode = false;
 let isClientMode = true;
 let selectedProducts = new Set();
 let productTableConfig = {};
-let syncEnabled = false;
-
-const FIREBASE_URL = 'https://pesquisa-produtos-16475-default-rtdb.firebaseio.com/produtos.json';
-const FIREBASE_TAGS_URL = 'https://pesquisa-produtos-16475-default-rtdb.firebaseio.com/customTags.json';
 
 // ===== Utilitários =====
 function hasVal(v) {
@@ -1634,25 +1626,8 @@ function getAllTags() {
 }
 
 // Tags "avulsas" (criadas manualmente, mesmo sem produto usando ainda).
-// Ficam salvas no Firebase (nó /customTags) e também em cache neste navegador.
-// Assim, criar/renomear/excluir tag sincroniza entre todos os dispositivos.
-async function loadCustomTags() {
-    syncEnabled = localStorage.getItem('syncEnabled') !== 'false';
-
-    if (syncEnabled) {
-        try {
-            const resp = await fetchWithTimeout(FIREBASE_TAGS_URL, 4000);
-            if (resp && resp.ok) {
-                const json = await resp.json();
-                // O Firebase devolve null quando a lista está vazia
-                const lista = Array.isArray(json) ? json : [];
-                customTags = lista.filter(t => typeof t === 'string');
-                localStorage.setItem('customTagsData', JSON.stringify(customTags));
-                return;
-            }
-        } catch (e) { /* segue para o fallback local */ }
-    }
-
+// Ficam salvas apenas neste navegador (localStorage).
+function loadCustomTags() {
     try {
         const saved = localStorage.getItem('customTagsData');
         customTags = saved ? JSON.parse(saved) : [];
@@ -1664,13 +1639,6 @@ async function loadCustomTags() {
 
 function saveCustomTags() {
     localStorage.setItem('customTagsData', JSON.stringify(customTags));
-    if (syncEnabled) {
-        fetch(FIREBASE_TAGS_URL, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(customTags)
-        }).catch(e => console.error('Erro ao sincronizar tags:', e));
-    }
 }
 
 function countProductsWithTag(tag) {
@@ -1682,7 +1650,7 @@ function tagBadges(tags) {
     return `<div class="product-tags">${tags.map(t => `<span class="tag-badge">${t}</span>`).join('')}</div>`;
 }
 
-// Se os dados carregados (do localStorage ou do Firebase) tiverem produtos sem tags,
+// Se os dados carregados do localStorage tiverem produtos sem tags,
 // tenta recuperar a tag certa comparando pelo nome com a lista padrão embutida no arquivo.
 // Isso evita que as tags "desapareçam" quando um arquivo mais antigo (sem tags) fica
 // salvo em cache no navegador e é recarregado por cima da versão nova.
@@ -1708,25 +1676,9 @@ function enrichMissingTags(lista) {
 }
 
 // ===== Carregar / salvar dados =====
-async function carregarDados() {
-    // Sincronização vem ativada por padrão; só fica desligada se o usuário desmarcar manualmente
-    syncEnabled = localStorage.getItem('syncEnabled') !== 'false';
-
-    if (syncEnabled) {
-        try {
-            const resp = await fetchWithTimeout(FIREBASE_URL, 4000);
-            if (resp && resp.ok) {
-                const json = await resp.json();
-                if (Array.isArray(json) && json.length > 0) {
-                    produtos = json;
-                    enrichMissingTags(produtos);
-                    localStorage.setItem('produtosData', JSON.stringify(produtos));
-                    return;
-                }
-            }
-        } catch (e) { /* segue para o fallback local */ }
-    }
-
+// Dados ficam apenas neste navegador (localStorage). Backup e transferência
+// entre dispositivos são feitos manualmente via Exportar/Importar JSON.
+function carregarDados() {
     const saved = localStorage.getItem('produtosData');
     if (saved) {
         try {
@@ -1743,37 +1695,9 @@ async function carregarDados() {
     produtos = JSON.parse(JSON.stringify(PRODUTOS_PADRAO));
 }
 
-function fetchWithTimeout(url, ms) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), ms);
-    return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer));
-}
-
 function saveProducts() {
     localStorage.setItem('produtosData', JSON.stringify(produtos));
-    if (syncEnabled) {
-        fetch(FIREBASE_URL, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(produtos)
-        }).catch(e => console.error('Erro ao sincronizar:', e));
-    }
     refreshTagUI();
-}
-
-// ===== Barra de status / sincronização =====
-function updateSyncStatusUI() {
-    const dot = document.getElementById('syncStatusDot');
-    const text = document.getElementById('syncStatusText');
-    const toggle = document.getElementById('syncToggle');
-    toggle.checked = syncEnabled;
-    if (syncEnabled) {
-        dot.classList.add('online');
-        text.textContent = 'Sincronização online ativada';
-    } else {
-        dot.classList.remove('online');
-        text.textContent = 'Modo offline (dados salvos só neste navegador)';
-    }
 }
 
 // ===== Filtro de tabela e tags =====
@@ -2518,10 +2442,9 @@ function importJs(file) {
 }
 
 // ===== Inicialização e eventos =====
-async function inicializarSistema() {
-    await carregarDados();
-    await loadCustomTags();
-    updateSyncStatusUI();
+function inicializarSistema() {
+    carregarDados();
+    loadCustomTags();
     refreshTagUI();
     filteredProducts = [...produtos];
     renderTable();
@@ -2561,7 +2484,6 @@ document.addEventListener('DOMContentLoaded', function () {
     const manageTagsModal = document.getElementById('manageTagsModal');
     const addNewTagBtn = document.getElementById('addNewTagBtn');
     const newTagNameInput = document.getElementById('newTagNameInput');
-    const syncToggle = document.getElementById('syncToggle');
     const exportJsonBtn = document.getElementById('exportJsonBtn');
     const importJsonBtn = document.getElementById('importJsonBtn');
     const importJsonInput = document.getElementById('importJsonInput');
@@ -2708,22 +2630,6 @@ document.addEventListener('DOMContentLoaded', function () {
     addNewTagBtn.addEventListener('click', addNewTag);
     newTagNameInput.addEventListener('keypress', function (e) {
         if (e.key === 'Enter') addNewTag();
-    });
-
-    syncToggle.addEventListener('change', async function () {
-        syncEnabled = this.checked;
-        localStorage.setItem('syncEnabled', syncEnabled ? 'true' : 'false');
-        updateSyncStatusUI();
-        if (syncEnabled) {
-            showToast('☁️ Tentando sincronizar...');
-            await carregarDados();
-            await loadCustomTags();
-            filteredProducts = [...produtos];
-            renderTable(searchInput.value);
-            renderCards(searchInput.value);
-            renderClientCards(searchInput.value);
-            refreshTagUI();
-        }
     });
 
     exportJsonBtn.addEventListener('click', exportJson);
