@@ -291,6 +291,12 @@ input[type=checkbox].ck{width:17px;height:17px;accent-color:var(--brand);cursor:
 
 /* Preparar para cliente */
 .prep-item{border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}
+.noprice-toggle{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line-strong);border-radius:var(--radius);padding:12px 14px;cursor:pointer;background:var(--surface);margin-bottom:4px}
+.noprice-toggle input{margin-top:3px;accent-color:var(--brand);width:16px;height:16px}
+.noprice-toggle.on{border-color:var(--brand);background:var(--brand-soft)}
+.noprice-toggle small{display:block;color:var(--muted,#777);font-weight:400;margin-top:2px}
+#modalBody.no-price .prep-opts{display:none}
+#modalBody.no-price .prep-name{margin-bottom:0}
 .prep-name{font-weight:600;margin-bottom:8px}
 .prep-opts{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px}
 .opt{border:1px solid var(--line-strong);border-radius:8px;padding:9px 11px;cursor:pointer;display:flex;gap:9px;align-items:flex-start;background:var(--surface)}
@@ -477,7 +483,7 @@ input[type=checkbox].ck{width:17px;height:17px;accent-color:var(--brand);cursor:
 
   <div class="hidden" id="customClientView">
     <div class="custom-head">
-      <h2>Orçamento para o cliente</h2>
+      <h2 id="customTitle">Orçamento para o cliente</h2>
       <button class="btn" type="button" id="backFromCustomBtn">Voltar à tabela</button>
       <button class="btn primary" type="button" id="copyAllBtn">
         <svg class="i" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>
@@ -659,6 +665,7 @@ let productTableConfig = {};
 let syncEnabled = false;
 let lastKnownUpdatedAt = 0;
 let customCopyTexts = {};
+let quoteNoPrice = false;
 let pendingAdminAction = null;
 let loginFails = 0;
 let loginLockedUntil = 0;
@@ -1321,6 +1328,9 @@ function formatPriceForClient(p) {
     return text.trim();
 }
 
+function buildNoPriceCopyText(p) {
+    return `📦 *${p.produto}*`;
+}
 function buildClientCopyText(p, tableIds) {
     const tables = Array.isArray(tableIds) ? tableIds : [tableIds];
     let text = `📦 *${p.produto}*\n`;
@@ -1456,6 +1466,19 @@ function openConfigModal() {
     const body = $('modalBody');
     const qtyT = currentQtyTable();
     body.innerHTML = '';
+    body.classList.toggle('no-price', quoteNoPrice);
+    const np = document.createElement('label');
+    np.className = 'noprice-toggle' + (quoteNoPrice ? ' on' : '');
+    np.innerHTML = `<input type="checkbox" id="noPriceChk" ${quoteNoPrice ? 'checked' : ''}>
+        <div><strong>Mandar sem preço</strong><small>Envia só o nome dos produtos, sem nenhum valor.</small></div>`;
+    np.querySelector('input').addEventListener('change', e => {
+        quoteNoPrice = e.target.checked;
+        np.classList.toggle('on', quoteNoPrice);
+        body.classList.toggle('no-price', quoteNoPrice);
+        $('confirmConfigBtn').textContent = quoteNoPrice ? 'Gerar lista sem preço' : 'Gerar orçamento';
+    });
+    body.appendChild(np);
+    $('confirmConfigBtn').textContent = quoteNoPrice ? 'Gerar lista sem preço' : 'Gerar orçamento';
     selectedProducts.forEach(index => {
         const p = produtos[index];
         if (!p) return;
@@ -1538,7 +1561,7 @@ function generateCustomClientView() {
         let tables = getSelectedTables(index);
         if (!tables.length) tables = [1];
         const showNames = tables.length > 1 || tables.includes(0);
-        const groups = tables.map(tid => {
+        const groups = quoteNoPrice ? '' : tables.map(tid => {
             const t = getTable(p, tid);
             const kind = tid === 0 ? 'promo' : 'pix';
             const pix = validPrice(t.pix) ? pvHTML('PIX ou dinheiro', t.pix, kind) : '';
@@ -1547,13 +1570,14 @@ function generateCustomClientView() {
             const name = showNames ? `<span class="tgroup-name">${escapeHtml(tid === 0 ? promoLabel(p) : tableDisplayName(tid))}</span>` : '';
             return `<div class="tgroup">${name}<div class="row-prices">${pix}${prazo}</div></div>`;
         }).join('');
-        customCopyTexts[index] = buildClientCopyText(p, tables);
+        customCopyTexts[index] = quoteNoPrice ? buildNoPriceCopyText(p) : buildClientCopyText(p, tables);
         return `<div class="row">
             <div><div class="row-name">${escapeHtml(p.produto)}</div><div class="row-meta">${categoryTags(p).map(t => `<span class="badge">${escapeHtml(t)}</span>`).join('')}</div></div>
             <div>${groups}</div>
             <button class="copy-btn" type="button" data-copy="custom" data-index="${index}">${ICON.copy}<span class="lbl">Copiar</span></button>
         </div>`;
     }).join('');
+    $('customTitle').textContent = quoteNoPrice ? 'Lista de produtos (sem preço)' : 'Orçamento para o cliente';
     closeModal('configModal');
     ['tableView', 'cardView', 'clientView'].forEach(id => $(id).classList.add('hidden'));
     $('customClientView').classList.remove('hidden');
@@ -1563,10 +1587,11 @@ function generateCustomClientView() {
 
 function copyAllProducts() {
     const texts = Array.from(selectedProducts).filter(i => produtos[i]).map(i => {
+        if (quoteNoPrice) return buildNoPriceCopyText(produtos[i]);
         const t = getSelectedTables(i);
         return buildClientCopyText(produtos[i], t.length ? t : [1]);
     });
-    copyToClipboard(texts.join('\n\n'), $('copyAllBtn')).then(() => showToast(`${texts.length} produto(s) copiados`));
+    copyToClipboard(texts.join(quoteNoPrice ? '\n' : '\n\n'), $('copyAllBtn')).then(() => showToast(`${texts.length} produto(s) copiados`));
 }
 
 // ===== Excluir =====
@@ -2092,7 +2117,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (e.target.closest('[data-cancel-table]')) { e.stopPropagation(); openConfigModal(); return; }
         const ed = e.target.closest('[data-edit-table]');
         if (ed) { e.stopPropagation(); editTableInline(Number(ed.dataset.editTable)); return; }
-        if (e.target.closest('.th-editor')) return;
+        if (e.target.closest('.th-editor') || e.target.closest('.noprice-toggle')) return;
         const opt = e.target.closest('.opt');
         if (opt) toggleTable(Number(opt.dataset.optIndex), Number(opt.dataset.optT), opt);
     });
