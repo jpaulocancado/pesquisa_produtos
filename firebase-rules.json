@@ -1,0 +1,10 @@
+{
+  "rules": {
+    "produtos":     { ".read": true, ".write": true },
+    "produtosMeta": { ".read": true, ".write": true },
+    "customTags":   { ".read": true, ".write": true },
+    "tableConfig":  { ".read": true, ".write": true },
+    "estoque":      { ".read": true, ".write": false },
+    "_bling_auth":  { ".read": false, ".write": false }
+  }
+}

@@ -166,6 +166,9 @@ input[type=checkbox].ck{width:17px;height:17px;accent-color:var(--brand);cursor:
 .badge{display:inline-flex;align-items:center;gap:4px;height:21px;padding:0 8px;border-radius:999px;font-size:12px;font-weight:500;white-space:nowrap;background:#F1EFED;color:var(--ink-2)}
 .badge.promo{background:var(--promo-bg);color:var(--promo);border:1px solid var(--promo-line)}
 .badge.stock{background:var(--stock-bg);color:var(--stock)}
+.badge.bling{background:#E8F1EC;color:#2F6B4A}
+.badge.bling.zero{background:var(--stock-bg);color:var(--stock)}
+.badge.bling.miss{background:#F1EFED;color:var(--muted)}
 .badge.expired{background:#F1EFED;color:var(--muted);text-decoration:line-through}
 
 /* ---------- Lista (cliente, cópia, apresentação) ---------- */
@@ -508,6 +511,11 @@ input[type=checkbox].ck{width:17px;height:17px;accent-color:var(--brand);cursor:
       </div>
 
       <div class="field">
+        <label for="pmSku">SKU no Bling <span class="hint-opt">(código do produto, para puxar o estoque)</span></label>
+        <input class="input" id="pmSku" placeholder="Ex: RST-KYSSE-1ML" autocomplete="off" spellcheck="false">
+      </div>
+
+      <div class="field">
         <span class="field-label">Categorias</span>
         <div class="tagbox" id="pmTagBox"><input id="pmTagInput" placeholder="Buscar ou criar categoria" autocomplete="off"></div>
         <div class="tag-suggest" id="pmTagSuggest"></div>
@@ -645,6 +653,7 @@ const FIREBASE_URL = FB + '/produtos.json';
 const FIREBASE_META_URL = FB + '/produtosMeta.json';
 const FIREBASE_TAGS_URL = FB + '/customTags.json';
 const FIREBASE_TABLE_CONFIG_URL = FB + '/tableConfig.json';
+const FIREBASE_ESTOQUE_URL = FB + '/estoque.json'; // gravado pelo GitHub Actions a partir do Bling
 
 const PRODUTOS_PADRAO = []; // Fonte única: Firebase. Backup completo em produtos.json.
 const STOCK_TAG = 'SEM ESTOQUE';
@@ -669,6 +678,7 @@ let quoteNoPrice = false;
 let pendingAdminAction = null;
 let loginFails = 0;
 let loginLockedUntil = 0;
+let estoqueBling = { atualizadoEm: 0, itens: {} };
 
 let tableConfig = {
     1: { label: 'TABELA 1', qtyMin: null, qtyMax: null },
@@ -947,8 +957,47 @@ function productBadges(p, opts = {}) {
     if (st === 'active') html += `<span class="badge promo">${escapeHtml(promoLabel(p))}</span>`;
     else if (st === 'expired' && isAdmin && !opts.client) html += `<span class="badge expired">Promoção vencida</span>`;
     if (isOutProduct(p)) html += `<span class="badge stock">Sem estoque</span>`;
+    html += estoqueBadge(p);
     categoryTags(p).forEach(t => { html += `<span class="badge">${escapeHtml(t)}</span>`; });
     return html;
+}
+
+// ===== Estoque do Bling (somente leitura) =====
+// Mesma regra do scripts/comum.py: Firebase não aceita . # $ [ ] / nas chaves.
+function chaveSku(sku) { return String(sku || '').trim().replace(/[.#$\[\]\/]/g, '_'); }
+function saldoBling(p) {
+    const k = chaveSku(p && p.sku);
+    if (!k || !estoqueBling.itens) return undefined;
+    return Object.prototype.hasOwnProperty.call(estoqueBling.itens, k) ? estoqueBling.itens[k] : null; // null = SKU não achado
+}
+function fmtQtd(n) { return Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 2 }); }
+function tempoDesde(ms) {
+    const min = Math.round((Date.now() - ms) / 60000);
+    if (min < 1) return 'agora';
+    if (min < 60) return `há ${min} min`;
+    const h = Math.round(min / 60);
+    if (h < 24) return `há ${h} h`;
+    return 'em ' + new Date(ms).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+}
+function estoqueBadge(p) {
+    const s = saldoBling(p);
+    if (s === undefined) return '';
+    const quando = estoqueBling.atualizadoEm ? `Bling, atualizado ${tempoDesde(estoqueBling.atualizadoEm)}` : 'Bling';
+    if (s === null) return isAdmin ? `<span class="badge bling miss" title="O SKU ${escapeHtmlAttr(p.sku)} não foi encontrado entre os produtos ativos do Bling">SKU não achado</span>` : '';
+    return `<span class="badge bling${s <= 0 ? ' zero' : ''}" title="${escapeHtmlAttr(quando)}">Estoque: ${escapeHtml(fmtQtd(s))}</span>`;
+}
+async function carregarEstoque() {
+    try {
+        const r = await fetchWithTimeout(FIREBASE_ESTOQUE_URL, 5000);
+        if (!r || !r.ok) return false;
+        const j = await r.json();
+        if (j && typeof j === 'object') {
+            const mudou = j.atualizadoEm !== estoqueBling.atualizadoEm;
+            estoqueBling = { atualizadoEm: j.atualizadoEm || 0, itens: j.itens || {} };
+            return mudou;
+        }
+    } catch (e) { }
+    return false;
 }
 
 // ===== Carregar / salvar produtos =====
@@ -1190,7 +1239,7 @@ function computeFiltered() {
     const term = normalizeText($('searchInput').value.trim());
     filteredProducts = produtos.filter(p => {
         if (!p || typeof p.produto !== 'string') return false;
-        const match = !term || normalizeText(p.produto).includes(term) || categoryTags(p).some(t => normalizeText(t).includes(term));
+        const match = !term || normalizeText(p.produto).includes(term) || normalizeText(p.sku).includes(term) || categoryTags(p).some(t => normalizeText(t).includes(term));
         return match && shouldShowProduct(p);
     }).sort((a, b) => a.produto.localeCompare(b.produto, 'pt-BR', { numeric: true }));
     $('resultCount').textContent = filteredProducts.length;
@@ -1680,6 +1729,8 @@ function openProductModal(index = null) {
     $('pmDeleteBtn').classList.toggle('hidden', !p);
     $('pmName').value = p ? p.produto : '';
     $('pmName').classList.remove('err');
+    $('pmSku').value = (p && p.sku) || '';
+    $('pmSku').classList.remove('err');
     pmTags = p ? categoryTags(p) : (activeTagFilter !== 'all' ? [activeTagFilter] : []);
     $('pmTagInput').value = '';
     $('pmOutOfStock').checked = p ? isOutProduct(p) : false;
@@ -1774,9 +1825,14 @@ async function saveProductFromModal() {
     if (!name) { $('pmName').classList.add('err'); $('pmName').focus(); showToast('Digite o nome do produto'); return; }
     const dup = produtos.some((p, i) => i !== pmIndex && (p.produto || '').trim().toUpperCase() === name);
     if (dup) { $('pmName').classList.add('err'); showToast('Já existe um produto com esse nome'); return; }
+    const sku = $('pmSku').value.trim();
+    if (sku) {
+        const outro = produtos.find((p, i) => i !== pmIndex && chaveSku(p.sku) === chaveSku(sku));
+        if (outro) { $('pmSku').classList.add('err'); showToast(`Esse SKU já está em "${outro.produto}"`); return; }
+    }
     commitTagInput();
 
-    const data = { produto: name };
+    const data = { produto: name, sku };
     let invalid = false;
     [1, 2, 3].forEach(n => {
         const a = readMoney(`pmT${n}Pix`), b = readMoney(`pmT${n}Prazo`);
@@ -2005,10 +2061,16 @@ async function inicializarSistema() {
     await carregarDados();
     await loadCustomTags();
     await loadTableConfig();
+    await carregarEstoque();
     updateSyncStatusUI();
     applyTableHeaderLabels();
     refreshTagUI();
     rerender();
+    // o GitHub Actions atualiza o estoque a cada 30 min; a página confere a cada 5
+    setInterval(async () => { if (await carregarEstoque()) rerender(); }, 5 * 60 * 1000);
+    document.addEventListener('visibilitychange', async () => {
+        if (document.visibilityState === 'visible' && await carregarEstoque()) rerender();
+    });
 }
 
 document.addEventListener('DOMContentLoaded', function () {
