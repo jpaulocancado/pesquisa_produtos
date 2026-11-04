@@ -1,0 +1,32 @@
+name: Preencher SKUs pelo nome
+
+on:
+  workflow_dispatch:
+    inputs:
+      sobrescrever:
+        description: "Refazer também os produtos que já têm SKU?"
+        type: choice
+        options: [nao, sim]
+        default: nao
+
+concurrency:
+  group: bling-token
+  cancel-in-progress: false
+
+jobs:
+  skus:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r scripts/requirements.txt
+      - run: python scripts/preencher_skus.py
+        env:
+          SOBRESCREVER: ${{ inputs.sobrescrever }}
+          BLING_CLIENT_ID: ${{ secrets.BLING_CLIENT_ID }}
+          BLING_CLIENT_SECRET: ${{ secrets.BLING_CLIENT_SECRET }}
+          BLING_REFRESH_TOKEN_INICIAL: ${{ secrets.BLING_REFRESH_TOKEN_INICIAL }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
