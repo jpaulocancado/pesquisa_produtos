@@ -980,6 +980,7 @@ function tempoDesde(ms) {
     return 'em ' + new Date(ms).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 }
 function estoqueBadge(p) {
+    if (!isAdmin) return '';                       // estoque só aparece para o administrador logado
     const s = saldoBling(p);
     if (s === undefined) return '';
     const quando = estoqueBling.atualizadoEm ? `Bling, atualizado ${tempoDesde(estoqueBling.atualizadoEm)}` : 'Bling';
